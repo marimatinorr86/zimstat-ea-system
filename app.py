@@ -1,23 +1,34 @@
-from flask import Flask, render_template, request, send_file
+from flask import Flask, render_template, request, send_file, jsonify
 import psycopg2
-import os
 
 app = Flask(__name__)
 
 # =========================
-# RENDER POSTGRESQL CONNECTION
+# DATABASE CONNECTION
 # =========================
 
 DATABASE_URL = "postgresql://zimstat_user:4ylHgll26POSbsqHLunNM48roLTOyKse@dpg-d8akaa0js32c7399ii70-a.virginia-postgres.render.com/zimstat_db"
 
-conn = psycopg2.connect(DATABASE_URL)
+def get_db_connection():
+    return psycopg2.connect(DATABASE_URL)
 
 # =========================
-# HOME PAGE
+# HOME MAP PAGE
+# =========================
+
+@app.route('/map')
+def map_view():
+    return render_template('map.html')
+
+# =========================
+# SINGLE EA MAP (FILTERED POLYGON)
 # =========================
 
 @app.route("/map/<geocode>")
 def get_ea(geocode):
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
 
     query = """
     SELECT json_build_object(
@@ -40,53 +51,40 @@ def get_ea(geocode):
     cursor.execute(query, (geocode,))
     result = cursor.fetchone()[0]
 
+    cursor.close()
+    conn.close()
+
     return jsonify(result)
 
 # =========================
 # SEARCH PAGE
 # =========================
+
 @app.route('/search', methods=['POST'])
 def search():
 
     geocode = request.form['ea_number']
 
+    conn = get_db_connection()
     cur = conn.cursor()
 
     query = """
-
     SELECT
-
         geocode,
         ea_number,
         population,
         households
-
     FROM population_data
-
     WHERE geocode = %s
-
     """
 
     cur.execute(query, (geocode,))
-
     result = cur.fetchone()
 
     cur.close()
+    conn.close()
 
-    return render_template(
-        'result.html',
-        result=result
-    )
-
-
-# =========================
-# GIS MAP PAGE
-# =========================
-
-@app.route('/map')
-def map_view():
-
-    return render_template('map.html')
+    return render_template('result.html', result=result)
 
 # =========================
 # REPORTS PAGE
@@ -94,7 +92,6 @@ def map_view():
 
 @app.route('/reports')
 def reports():
-
     return render_template('reports.html')
 
 # =========================
@@ -106,19 +103,11 @@ def download_shapefile():
 
     shapefile_path = "static/shapefiles/kwekwe_eas.zip"
 
-    return send_file(
-        shapefile_path,
-        as_attachment=True
-    )
+    return send_file(shapefile_path, as_attachment=True)
 
 # =========================
-# RUN APPLICATION
+# RUN APP
 # =========================
 
 if __name__ == '__main__':
-
-    app.run(
-        host='0.0.0.0',
-        port=5000,
-        debug=True
-    )
+    app.run(host='0.0.0.0', port=5000, debug=True)
