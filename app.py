@@ -22,7 +22,7 @@ def home():
     cur = conn.cursor()
 
     # TOTAL EAs
-    cur.execute("SELECT COUNT(*) FROM population_data")
+    cur.execute("SELECT COUNT(DISTINCT ea_number) FROM population_data")
     total_eas = cur.fetchone()[0]
 
     # TOTAL IMAGES
@@ -66,12 +66,17 @@ FROM population_data p
 LEFT JOIN ea_images i
 ON p.ea_number = i.ea_number
 
-WHERE p.ea_number = %s
+WHERE TRIM(p.ea_number) = TRIM(%s)
 
 """
     cur.execute(query, (ea_number,))
+    print(cur.fetchall())
 
-    result = cur.fetchone()
+    results = cur.fetchall()
+
+print(results)
+
+result = results[0] if results else None
 
     cur.close()
 
