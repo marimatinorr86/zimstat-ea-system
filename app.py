@@ -44,39 +44,31 @@ def home():
 # =========================
 # SEARCH PAGE
 # =========================
-
 @app.route('/search', methods=['POST'])
 def search():
 
-    ea_number = request.form['ea_number']
+    geocode = request.form['ea_number']
 
     cur = conn.cursor()
 
     query = """
 
-SELECT
+    SELECT
 
-    p.ea_number,
-    p.population,
-    p.households,
-    i.image_path
+        geocode,
+        ea_number,
+        population,
+        households
 
-FROM population_data p
+    FROM population_data
 
-LEFT JOIN ea_images i
-ON p.ea_number = i.ea_number
+    WHERE geocode = %s
 
-WHERE TRIM(p.ea_number) = TRIM(%s)
+    """
 
-"""
-    cur.execute(query, (ea_number,))
-    print(cur.fetchall())
+    cur.execute(query, (geocode,))
 
-    results = cur.fetchall()
-
-print(results)
-
-result = results[0] if results else None
+    result = cur.fetchone()
 
     cur.close()
 
@@ -84,6 +76,7 @@ result = results[0] if results else None
         'result.html',
         result=result
     )
+
 
 # =========================
 # GIS MAP PAGE
