@@ -16,30 +16,31 @@ conn = psycopg2.connect(DATABASE_URL)
 # HOME PAGE
 # =========================
 
-@app.route('/')
-def home():
+@app.route("/map/<geocode>")
+def get_ea(geocode):
 
-    cur = conn.cursor()
-
-    # TOTAL EAs
-    cur.execute("SELECT COUNT(DISTINCT ea_number) FROM population_data")
-    total_eas = cur.fetchone()[0]
-
-    # TOTAL IMAGES
-    cur.execute("SELECT COUNT(*) FROM ea_images")
-    total_images = cur.fetchone()[0]
-
-    # TOTAL DISTRICTS
-    total_districts = 1
-
-    cur.close()
-
-    return render_template(
-        'index.html',
-        total_eas=total_eas,
-        total_images=total_images,
-        total_districts=total_districts
+    query = """
+    SELECT json_build_object(
+        'type', 'FeatureCollection',
+        'features', json_agg(
+            json_build_object(
+                'type', 'Feature',
+                'geometry', ST_AsGeoJSON(geom)::json,
+                'properties', json_build_object(
+                    'geocode', geocode,
+                    'ea_number', ea_number
+                )
+            )
+        )
     )
+    FROM population_data
+    WHERE geocode = %s;
+    """
+
+    cursor.execute(query, (geocode,))
+    result = cursor.fetchone()[0]
+
+    return jsonify(result)
 
 # =========================
 # SEARCH PAGE
