@@ -4,49 +4,55 @@
 <head>
 
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
 
     <title>ZIMSTAT Web GIS</title>
 
     <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css"/>
+    <link rel="stylesheet"
+          href="https://unpkg.com/leaflet/dist/leaflet.css"/>
 
     <!-- Bootstrap -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+          rel="stylesheet">
 
     <style>
 
-        body {
-            margin: 0;
-            font-family: Poppins, sans-serif;
-            background: #f5f7fa;
+        body{
+
+            margin:0;
+
+            font-family:Poppins,sans-serif;
+
+            background:#f5f7fa;
         }
 
-        #map {
-            height: 100vh;
-            width: 100%;
+        #map{
+
+            height:100vh;
+
+            width:100%;
         }
 
-        .title-box {
-            position: absolute;
-            top: 20px;
-            left: 70px;
-            z-index: 1000;
-            background: white;
-            padding: 15px 25px;
-            border-radius: 15px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-        }
+        .title-box{
 
-        .search-box {
-            position: absolute;
-            top: 140px;
-            left: 70px;
-            z-index: 1000;
-            background: white;
-            padding: 10px;
-            border-radius: 10px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+            position:absolute;
+
+            top:20px;
+
+            left:70px;
+
+            z-index:1000;
+
+            background:white;
+
+            padding:15px 25px;
+
+            border-radius:15px;
+
+            box-shadow:0 4px 15px rgba(0,0,0,0.2);
         }
 
     </style>
@@ -58,16 +64,17 @@
     <!-- TITLE -->
     <div class="title-box">
 
-        <h3>ZIMSTAT EA Web GIS</h3>
-        <p>Interactive Enumeration Area Viewer</p>
+        <h3>
 
-    </div>
+            ZIMSTAT EA Web GIS
 
-    <!-- SEARCH -->
-    <div class="search-box">
+        </h3>
 
-        <input type="text" id="eaInput" class="form-control" placeholder="Enter EA (e.g. KK001)">
-        <button class="btn btn-primary mt-2 w-100" onclick="loadEA()">Load EA</button>
+        <p>
+
+            Interactive Enumeration Area Viewer
+
+        </p>
 
     </div>
 
@@ -79,62 +86,54 @@
 
     <script>
 
-        // INIT MAP
+        // CREATE MAP
         var map = L.map('map').setView([-18.93, 29.81], 10);
 
         // BASEMAP
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenStreetMap contributors'
-        }).addTo(map);
+        L.tileLayer(
 
-        // STORE LAYER
-        let eaLayer;
+            'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
 
-        // LOAD SINGLE EA FUNCTION
-        function loadEA(geocode) {
+            {
 
-            // if button used
-            if (!geocode) {
-                geocode = document.getElementById("eaInput").value;
+                attribution:'© OpenStreetMap contributors'
+
             }
 
-            fetch(`/map/${geocode}`)
-                .then(res => res.json())
-                .then(data => {
+        ).addTo(map);
 
-                    // remove old layer
-                    if (eaLayer) {
-                        map.removeLayer(eaLayer);
-                    }
+        // LOAD GEOJSON
+        fetch('/static/kwekwe_eas.geojson')
 
-                    // add new layer
-                    eaLayer = L.geoJSON(data, {
+        .then(response => response.json())
 
-                        style: {
-                            color: 'red',
-                            weight: 3,
-                            fillOpacity: 0.4
-                        },
+        .then(data => {
 
-                        onEachFeature: function(feature, layer) {
+            L.geoJSON(data, {
 
-                            layer.bindPopup(
-                                "<b>EA:</b> " + feature.properties.geocode +
-                                "<br><b>EA Number:</b> " + feature.properties.ea_number
-                            );
-                        }
+                style: {
 
-                    }).addTo(map);
+                    color: '#0d6efd',
+                    weight: 2,
+                    fillOpacity: 0.3
 
-                    // zoom to EA
-                    map.fitBounds(eaLayer.getBounds());
+                },
 
-                })
-                .catch(err => {
-                    alert("EA not found or server error");
-                    console.log(err);
-                });
-        }
+                onEachFeature: function(feature, layer){
+
+                    layer.bindPopup(
+
+                        "<b>EA Number:</b> " +
+
+                        feature.properties["EA NUMBER"]
+
+                    );
+
+                }
+
+            }).addTo(map);
+
+        });
 
     </script>
 
