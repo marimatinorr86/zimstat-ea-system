@@ -22,7 +22,7 @@ def home():
     cur = conn.cursor()
 
     # TOTAL EAs
-    cur.execute("SELECT COUNT(*) FROM ea_full_data")
+    cur.execute("SELECT COUNT(*) FROM population_data")
     total_eas = cur.fetchone()[0]
 
     # TOTAL IMAGES
@@ -54,27 +54,21 @@ def search():
 
     query = """
 
-    SELECT
-        e.ea_number,
-        e.ward,
-        e.district,
-        e.province,
-        p.population,
-        p.households,
-        i.image_path
+SELECT
 
-    FROM ea_full_data e
+    p.ea_number,
+    p.population,
+    p.households,
+    i.image_path
 
-    LEFT JOIN population_data p
-    ON e.ea_number = p.ea_number
+FROM population_data p
 
-    LEFT JOIN ea_images i
-    ON e.ea_number = i.ea_number
+LEFT JOIN ea_images i
+ON p.ea_number = i.ea_number
 
-    WHERE e.ea_number = %s
+WHERE p.ea_number = %s
 
-    """
-
+"""
     cur.execute(query, (ea_number,))
 
     result = cur.fetchone()
