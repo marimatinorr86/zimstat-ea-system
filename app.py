@@ -57,13 +57,16 @@ def get_ea(geocode):
     return jsonify(result)
 
 # =========================
-# SEARCH PAGE
+# SEARCH PAGE (FIXED)
 # =========================
 
 @app.route('/search', methods=['POST'])
 def search():
 
-    geocode = request.form['ea_number']
+    geocode = request.form.get('geocode')  # FIXED
+
+    if not geocode:
+        return "No geocode provided", 400
 
     conn = get_db_connection()
     cur = conn.cursor()
@@ -75,7 +78,7 @@ def search():
         population,
         households
     FROM population_data
-    WHERE geocode = %s
+    WHERE geocode = %s;
     """
 
     cur.execute(query, (geocode,))
@@ -83,6 +86,9 @@ def search():
 
     cur.close()
     conn.close()
+
+    if result is None:
+        return render_template("result.html", result=None)
 
     return render_template('result.html', result=result)
 
@@ -92,7 +98,28 @@ def search():
 
 @app.route('/reports')
 def reports():
-    return render_template('reports.html')
+
+    conn = get_db_connection()
+    cur = conn.cursor()
+
+    cur.execute("SELECT COUNT(*) FROM population_data")
+    total_eas = cur.fetchone()[0]
+
+    cur.execute("SELECT SUM(population) FROM population_data")
+    total_population = cur.fetchone()[0]
+
+    cur.execute("SELECT SUM(households) FROM population_data")
+    total_households = cur.fetchone()[0]
+
+    cur.close()
+    conn.close()
+
+    return render_template(
+        'reports.html',
+        total_eas=total_eas,
+        total_population=total_population,
+        total_households=total_households
+    )
 
 # =========================
 # DOWNLOAD SHAPEFILE
@@ -100,9 +127,7 @@ def reports():
 
 @app.route('/download_shapefile')
 def download_shapefile():
-
     shapefile_path = "static/shapefiles/kwekwe_eas.zip"
-
     return send_file(shapefile_path, as_attachment=True)
 
 # =========================
