@@ -1,96 +1,99 @@
-from flask import Flask, render_template, request, send_file, jsonify
+from flask import Flask, render_template, request, send_file
 import psycopg2
+import os
 
 app = Flask(__name__)
 
 # =========================
-# DATABASE CONNECTION
+# RENDER POSTGRESQL CONNECTION
 # =========================
 
 DATABASE_URL = "postgresql://zimstat_user:4ylHgll26POSbsqHLunNM48roLTOyKse@dpg-d8akaa0js32c7399ii70-a.virginia-postgres.render.com/zimstat_db"
 
-def get_db_connection():
-    return psycopg2.connect(DATABASE_URL)
+conn = psycopg2.connect(DATABASE_URL)
 
 # =========================
-# HOME MAP PAGE
+# HOME PAGE
 # =========================
 
-@app.route('/map')
-def map_view():
-    return render_template('map.html')
+@app.route('/')
+def home():
 
-# =========================
-# SINGLE EA MAP (FILTERED POLYGON)
-# =========================
+    cur = conn.cursor()
 
-@app.route("/map/<geocode>")
-def get_ea(geocode):
+    # TOTAL EAs
+    cur.execute("SELECT COUNT(*) FROM ea_full_data")
+    total_eas = cur.fetchone()[0]
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    # TOTAL IMAGES
+    cur.execute("SELECT COUNT(*) FROM ea_images")
+    total_images = cur.fetchone()[0]
 
-    query = """
-    SELECT json_build_object(
-        'type', 'FeatureCollection',
-        'features', json_agg(
-            json_build_object(
-                'type', 'Feature',
-                'geometry', ST_AsGeoJSON(geom)::json,
-                'properties', json_build_object(
-                    'geocode', geocode,
-                    'ea_number', ea_number
-                )
-            )
-        )
+    # TOTAL DISTRICTS
+    total_districts = 1
+
+    cur.close()
+
+    return render_template(
+        'index.html',
+        total_eas=total_eas,
+        total_images=total_images,
+        total_districts=total_districts
     )
-    FROM population_data
-    WHERE geocode = %s;
-    """
-
-    cursor.execute(query, (geocode,))
-    result = cursor.fetchone()[0]
-
-    cursor.close()
-    conn.close()
-
-    return jsonify(result)
 
 # =========================
-# SEARCH PAGE (FIXED)
+# SEARCH PAGE
 # =========================
 
 @app.route('/search', methods=['POST'])
 def search():
 
-    geocode = request.form.get('geocode')  # FIXED
+    ea_number = request.form['ea_number']
 
-    if not geocode:
-        return "No geocode provided", 400
-
-    conn = get_db_connection()
     cur = conn.cursor()
 
     query = """
+
     SELECT
-        geocode,
-        ea_number,
-        population,
-        households
-    FROM population_data
-    WHERE geocode = %s;
+        e.ea_number,
+        e.ward,
+        e.district,
+        e.province,
+        p.population,
+        p.households,
+        i.image_path
+
+    FROM ea_full_data e
+
+    LEFT JOIN population_data p
+    ON e.ea_number = p.ea_number
+
+    LEFT JOIN ea_images i
+    ON e.ea_number = i.ea_number
+
+    WHERE e.ea_number = %s
+
     """
 
-    cur.execute(query, (geocode,))
+    cur.execute(query, (ea_number,))
+
     result = cur.fetchone()
 
     cur.close()
-    conn.close()
 
-    if result is None:
-        return render_template("result.html", result=None)
+    return render_template(
+        'result.html',
+        result=result
+    )
 
-    return render_template('result.html', result=result)
+# =========================
+# GIS MAP PAGE
+# =========================
+
+@app.route('/map')
+def map_view():
+
+    return render_template('map.html')
 
 # =========================
 # REPORTS PAGE
@@ -99,27 +102,7 @@ def search():
 @app.route('/reports')
 def reports():
 
-    conn = get_db_connection()
-    cur = conn.cursor()
-
-    cur.execute("SELECT COUNT(*) FROM population_data")
-    total_eas = cur.fetchone()[0]
-
-    cur.execute("SELECT SUM(population) FROM population_data")
-    total_population = cur.fetchone()[0]
-
-    cur.execute("SELECT SUM(households) FROM population_data")
-    total_households = cur.fetchone()[0]
-
-    cur.close()
-    conn.close()
-
-    return render_template(
-        'reports.html',
-        total_eas=total_eas,
-        total_population=total_population,
-        total_households=total_households
-    )
+    return render_template('reports.html')
 
 # =========================
 # DOWNLOAD SHAPEFILE
@@ -127,12 +110,22 @@ def reports():
 
 @app.route('/download_shapefile')
 def download_shapefile():
+
     shapefile_path = "static/shapefiles/kwekwe_eas.zip"
-    return send_file(shapefile_path, as_attachment=True)
+
+    return send_file(
+        shapefile_path,
+        as_attachment=True
+    )
 
 # =========================
-# RUN APP
+# RUN APPLICATION
 # =========================
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+
+    app.run(
+        host='0.0.0.0',
+        port=5000,
+        debug=True
+    )
