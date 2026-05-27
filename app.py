@@ -1,99 +1,119 @@
-from flask import Flask, render_template, request, send_file
+from flask import Flask, render_template, request, send_file, jsonify
 import psycopg2
-import os
 
 app = Flask(__name__)
 
 # =========================
-# RENDER POSTGRESQL CONNECTION
+# DATABASE CONNECTION
 # =========================
 
 DATABASE_URL = "postgresql://zimstat_user:4ylHgll26POSbsqHLunNM48roLTOyKse@dpg-d8akaa0js32c7399ii70-a.virginia-postgres.render.com/zimstat_db"
 
-conn = psycopg2.connect(DATABASE_URL)
+def get_db_connection():
+    return psycopg2.connect(DATABASE_URL)
 
 # =========================
 # HOME PAGE
 # =========================
 
 @app.route('/')
-def home():
-
-    cur = conn.cursor()
-
-    # TOTAL EAs
-    cur.execute("SELECT COUNT(*) FROM ea_full_data")
-    total_eas = cur.fetchone()[0]
-
-    # TOTAL IMAGES
-    cur.execute("SELECT COUNT(*) FROM ea_images")
-    total_images = cur.fetchone()[0]
-
-    # TOTAL DISTRICTS
-    total_districts = 1
-
-    cur.close()
-
-    return render_template(
-        'index.html',
-        total_eas=total_eas,
-        total_images=total_images,
-        total_districts=total_districts
-    )
+def index():
+    return render_template('index.html')
 
 # =========================
-# SEARCH PAGE
+# MAP PAGE
+# =========================
+
+@app.route('/map')
+def map_view():
+    return render_template('map.html')
+
+# =========================
+# SINGLE EA GEOJSON (MAP LAYER)
+# =========================
+
+@app.route("/map/<geocode>")
+def get_ea(geocode):
+
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        query = """
+        SELECT json_build_object(
+            'type', 'FeatureCollection',
+            'features', json_agg(
+                json_build_object(
+                    'type', 'Feature',
+                    'geometry', ST_AsGeoJSON(geom)::json,
+                    'properties', json_build_object(
+                        'geocode', geocode,
+                        'ea_number', ea_number,
+                        'population', population,
+                        'households', households
+                    )
+                )
+            )
+        )
+        FROM population_data
+        WHERE geocode = %s;
+        """
+
+        cur.execute(query, (geocode,))
+        result = cur.fetchone()[0]
+
+        cur.close()
+        conn.close()
+
+        return jsonify(result)
+
+    except Exception as e:
+        print("MAP ERROR:", e)
+        return jsonify({"error": str(e)}), 500
+
+
+# =========================
+# SEARCH (EA NUMBER BASED)
 # =========================
 
 @app.route('/search', methods=['POST'])
 def search():
 
-    ea_number = request.form['ea_number']
+    try:
+        ea_number = request.form.get('ea_number')
 
-    cur = conn.cursor()
+        if not ea_number:
+            return "EA number is required", 400
 
-    query = """
+        conn = get_db_connection()
+        cur = conn.cursor()
 
-    SELECT
-        e.ea_number,
-        e.ward,
-        e.district,
-        e.province,
-        p.population,
-        p.households,
-        i.image_path
+        query = """
+        SELECT
+            geocode,
+            ea_number,
+            population,
+            households
+        FROM population_data
+        WHERE ea_number = %s;
+        """
 
-    FROM ea_full_data e
+        cur.execute(query, (ea_number,))
+        result = cur.fetchone()
 
-    LEFT JOIN population_data p
-    ON e.ea_number = p.ea_number
+        cur.close()
+        conn.close()
 
-    LEFT JOIN ea_images i
-    ON e.ea_number = i.ea_number
+        # If nothing found
+        if result is None:
+            return render_template("result.html", result=None)
 
-    WHERE e.ea_number = %s
+        return render_template("result.html", result=result)
 
-    """
+    except Exception as e:
+        print("SEARCH ERROR:", e)
+        return f"Server Error: {str(e)}", 500
 
-    cur.execute(query, (ea_number,))
-
-    result = cur.fetchone()
-
-    cur.close()
-
-    return render_template(
-        'result.html',
-        result=result
-    )
-
-# =========================
-# GIS MAP PAGE
-# =========================
-
-@app.route('/map')
-def map_view():
-
-    return render_template('map.html')
 
 # =========================
 # REPORTS PAGE
@@ -102,7 +122,33 @@ def map_view():
 @app.route('/reports')
 def reports():
 
-    return render_template('reports.html')
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+
+        cur.execute("SELECT COUNT(*) FROM population_data")
+        total_eas = cur.fetchone()[0]
+
+        cur.execute("SELECT SUM(population) FROM population_data")
+        total_population = cur.fetchone()[0] or 0
+
+        cur.execute("SELECT SUM(households) FROM population_data")
+        total_households = cur.fetchone()[0] or 0
+
+        cur.close()
+        conn.close()
+
+        return render_template(
+            "reports.html",
+            total_eas=total_eas,
+            total_population=total_population,
+            total_households=total_households
+        )
+
+    except Exception as e:
+        print("REPORTS ERROR:", e)
+        return f"Server Error: {str(e)}", 500
+
 
 # =========================
 # DOWNLOAD SHAPEFILE
@@ -110,22 +156,17 @@ def reports():
 
 @app.route('/download_shapefile')
 def download_shapefile():
+    try:
+        shapefile_path = "static/shapefiles/kwekwe_eas.zip"
+        return send_file(shapefile_path, as_attachment=True)
+    except Exception as e:
+        print("DOWNLOAD ERROR:", e)
+        return f"File error: {str(e)}", 500
 
-    shapefile_path = "static/shapefiles/kwekwe_eas.zip"
-
-    return send_file(
-        shapefile_path,
-        as_attachment=True
-    )
 
 # =========================
-# RUN APPLICATION
+# RUN APP
 # =========================
 
 if __name__ == '__main__':
-
-    app.run(
-        host='0.0.0.0',
-        port=5000,
-        debug=True
-    )
+    app.run(host='0.0.0.0', port=5000, debug=True)
